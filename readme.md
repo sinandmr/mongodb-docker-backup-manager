@@ -1,111 +1,109 @@
 # MongoDB Docker Backup Manager
 
-🇹🇷 Docker üzerinde çalışan MongoDB veritabanları için Türkçe arayüzlü yedekleme yönetim aracı
+[English](#english) | [Türkçe](#türkçe)
 
-## Özellikler
+# English
 
-- 🔍 Otomatik MongoDB container tespiti ve seçimi
-- 🔐 Kimlik doğrulamalı ve doğrulamasız MongoDB desteği
-- 💾 Tek veya tüm veritabanlarını yedekleme
-- 📦 Akıllı yedek depolama yönetimi
-- 🔄 Kolay geri yükleme (mevcut veriyi koruma/silme seçenekli)
-- 📋 Detaylı yedek geçmişi
-- 🎯 Çoklu platform desteği (Linux, macOS)
-- 🇹🇷 Tam Türkçe arayüz
+## Overview
 
-## Gereksinimler
+MongoDB Docker Backup Manager is a comprehensive backup management tool for MongoDB databases running in Docker containers. It provides an easy-to-use interface
+for backup, restore, and management operations.
 
-- Docker yüklü ve çalışır durumda olmalı
-- En az bir MongoDB container'ı çalışıyor olmalı
-- Bash shell ortamı
-- Docker işlemleri için yeterli yetkiler
+## Features
 
-## Kurulum
+- Full database backup and restore
+- Collection-based selective backup
+- Backup comparison and analysis
+- Database statistics monitoring
+- Multi-language support (English/Turkish)
+- Secure authentication handling
+- Detailed backup history tracking
 
-1. Repo'yu klonlayın:
+## Requirements
 
-```bash
-git clone https://github.com/kullanıcı-adı/mongodb-docker-backup-manager.git
-cd mongodb-docker-backup-manager
-```
+- Docker
+- Bash shell
+- MongoDB container
 
-2. Scripti çalıştırılabilir yapın:
+## Installation
 
 ```bash
+git clone https://github.com/username/mongo-backup-manager.git
+cd mongo-backup-manager
 chmod +x mongo_backup_manager.sh
 ```
 
-## Kullanım
-
-1. Scripti başlatın:
+## Usage
 
 ```bash
 ./mongo_backup_manager.sh
 ```
 
-2. İlk çalıştırmada:
+## Documentation
 
-   - Yedekleme dizini seçmeniz istenecek
-   - Çalışan MongoDB container'ları listelenecek
-   - Container seçimi yapmanız istenecek
-   - Gerekiyorsa kimlik doğrulama bilgileri istenecek
+- [API Documentation](docs/en/API.md)
+- [Usage Guide](docs/en/USAGE.md)
+- [Troubleshooting](docs/en/TROUBLESHOOTING.md)
+- [Contributing](docs/en/CONTRIBUTING.md)
 
-3. Ana menüden işlem seçin:
-   - Yedek alma
-   - Yedek geri yükleme
-   - Yedekleri listeleme
-   - Yedek silme
-   - Container değiştirme
-   - Veritabanı değiştirme
+## Contributing
 
-## Özellikler Detayı
+We welcome contributions! Please see our [Contributing Guide](docs/en/CONTRIBUTING.md) for details.
 
-### Yedekleme
+## License
 
-- 📝 Her yedek için açıklama ekleme
-- 📊 Yedek boyutu gösterimi
-- 🕒 Okunabilir tarih formatı
-- 📜 Son işlemler geçmişi
-- ⌨️ Tab completion desteği
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-### Geri Yükleme
+---
 
-- 🔄 Mevcut veriyi koruma seçeneği
-- 🗑️ Mevcut veriyi silip temiz kurulum
-- 📋 Yedek listesinden kolay seçim
+# Türkçe
 
-### Güvenlik
+## Genel Bakış
 
-- 🔐 Güvenli kimlik doğrulama
-- 🛡️ Yedek dizini izin kontrolleri
-- ⚡ Otomatik sudo yönetimi
+MongoDB Docker Yedekleme Yöneticisi, Docker container'larında çalışan MongoDB veritabanları için kapsamlı bir yedekleme yönetim aracıdır. Yedekleme, geri
+yükleme ve yönetim işlemleri için kullanımı kolay bir arayüz sunar.
 
-### Platform Desteği
+## Özellikler
 
-- 🍎 macOS için özel dizin yapısı
-- 🐧 Linux dağıtımlarına özel yapılandırma
-- 📁 İşletim sistemine göre akıllı dizin seçimi
+- Tam veritabanı yedekleme ve geri yükleme
+- Koleksiyon bazlı seçmeli yedekleme
+- Yedek karşılaştırma ve analizi
+- Veritabanı istatistikleri izleme
+- Çoklu dil desteği (İngilizce/Türkçe)
+- Güvenli kimlik doğrulama yönetimi
+- Detaylı yedekleme geçmişi takibi
 
-## Sık Sorulan Sorular
+## Gereksinimler
 
-**S: Yedekler nereye kaydediliyor?** C: İşletim sistemine göre varsayılan dizinler:
+- Docker
+- Bash shell
+- MongoDB container
 
-- macOS: `~/Desktop/mongodb_backups`
-- Ubuntu/Debian: `/var/backups/mongodb`
-- CentOS/RHEL: `/var/opt/mongodb/backups`
+## Kurulum
 
-**S: Kimlik doğrulama bilgilerini her seferinde girmem gerekiyor mu?** C: Hayır, script oturumu boyunca bilgiler saklanır.
+```bash
+git clone https://github.com/username/mongo-backup-manager.git
+cd mongo-backup-manager
+chmod +x mongo_backup_manager.sh
+```
 
-**S: Yedekleri nasıl organize edebilirim?** C: Her yedeğe açıklama ekleyebilir, tarih ve boyut bilgilerini görüntüleyebilirsiniz.
+## Kullanım
+
+```bash
+./mongo_backup_manager.sh
+```
+
+## Dökümantasyon
+
+- [API Dokümantasyonu](docs/API.md)
+- [Kullanım Kılavuzu](docs/USAGE.md)
+- [Sorun Giderme](docs/TROUBLESHOOTING.md)
+- [Katkı Sağlama](docs/CONTRIBUTING.md)
+
+## Katkı Sağlama
+
+Katkılarınızı bekliyoruz! Detaylar için [Katkı Sağlama Rehberi](docs/CONTRIBUTING.md)'ni inceleyebilirsiniz.
 
 ## Lisans
 
-Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICENSE) dosyasına bakın.
-
-## Katkıda Bulunma
-
-1. Fork edin
-2. Feature branch oluşturun (`git checkout -b feature/özellik`)
-3. Değişikliklerinizi commit edin (`git commit -am 'Yeni özellik: özellik açıklaması'`)
-4. Branch'inizi push edin (`git push origin feature/özellik`)
-5. Pull Request oluşturun
+Bu proje MIT Lisansı ile lisanslanmıştır - detaylar için [LICENSE](LICENSE) dosyasına bakınız.
