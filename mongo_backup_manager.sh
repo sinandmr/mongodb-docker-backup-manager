@@ -660,6 +660,250 @@ show_history() {
     read -p "$PROMPT_CONTINUE"
 }
 
+# Koleksiyon listesini al
+get_collections() {
+    local db_name="$1"
+    local mongo_cmd="mongosh --quiet"
+    
+    if [ -n "$MONGO_USER" ] && [ -n "$MONGO_PASS" ]; then
+        mongo_cmd="$mongo_cmd --username $MONGO_USER --password $MONGO_PASS --authenticationDatabase $AUTH_DB"
+    fi
+    
+    mongo_cmd="$mongo_cmd $db_name --eval \"db.getCollectionNames().join('\n')\""
+    docker exec "$CONTAINER_ID" bash -c "$mongo_cmd" || error "$ERR_GET_COLLECTIONS"
+}
+
+# Veritabanı istatistiklerini görüntüle
+show_db_stats() {
+    echo
+    info "$INFO_DB_STATS"
+    echo "----------------------------------------"
+    
+    local mongo_cmd="mongosh --quiet"
+    if [ -n "$MONGO_USER" ] && [ -n "$MONGO_PASS" ]; then
+        mongo_cmd="$mongo_cmd --username $MONGO_USER --password $MONGO_PASS --authenticationDatabase $AUTH_DB"
+    fi
+    
+    if [ "$DB_NAME" = "all" ]; then
+        warning "$ERR_STATS_ALL_DBS"
+        return
+    fi
+    
+    # Veritabanı istatistiklerini al
+    mongo_cmd="$mongo_cmd $DB_NAME --eval \"JSON.stringify(db.stats(), null, 2)\""
+    local stats=$(docker exec "$CONTAINER_ID" bash -c "$mongo_cmd")
+    
+    # İstatistikleri formatla ve göster
+    echo "$stats" | python3 -m json.tool
+    
+    echo "----------------------------------------"
+    read -p "$PROMPT_CONTINUE"
+}
+
+# Koleksiyon seçimi
+select_collections() {
+    echo
+    info "$INFO_SELECT_COLLECTIONS"
+    echo "----------------------------------------"
+    
+    if [ "$DB_NAME" = "all" ]; then
+        warning "$ERR_COLLECTIONS_ALL_DBS"
+        return 1
+    fi
+    
+    # Koleksiyonları listele
+    declare -a collection_list
+    local counter=1
+    
+    while read -r collection; do
+        if [ -n "$collection" ]; then
+            collection_list+=("$collection")
+            echo "$counter) $collection"
+            ((counter++))
+        fi
+    done < <(get_collections "$DB_NAME")
+    
+    if [ ${#collection_list[@]} -eq 0 ]; then
+        warning "$ERR_NO_COLLECTIONS"
+        return 1
+    fi
+    
+    # Çoklu seçim için dizi
+    declare -a selected_collections
+    
+    echo
+    info "$INFO_COLLECTION_SELECTION"
+    echo "$MSG_COLLECTION_HELP"
+    echo
+    
+    while true; do
+        read -p "$PROMPT_COLLECTION_SELECT" selection
+        
+        if [ "$selection" = "0" ]; then
+            break
+        elif [ "$selection" = "a" ]; then
+            selected_collections=("${collection_list[@]}")
+            break
+        elif [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le ${#collection_list[@]} ]; then
+            selected_collections+=("${collection_list[$((selection-1))]}")
+        else
+            warning "$ERR_INVALID_CHOICE"
+        fi
+    done
+    
+    if [ ${#selected_collections[@]} -eq 0 ]; then
+        warning "$MSG_NO_COLLECTIONS_SELECTED"
+        return 1
+    fi
+    
+    echo
+    info "$MSG_SELECTED_COLLECTIONS:"
+    printf '%s\n' "${selected_collections[@]}"
+    echo
+    
+    # Seçilen koleksiyonları geçici dosyaya kaydet
+    printf '%s\n' "${selected_collections[@]}" > /tmp/selected_collections.txt
+    return 0
+}
+
+# Yedek içeriğini görüntüle
+show_backup_content() {
+    echo
+    info "$INFO_BACKUP_CONTENT"
+    echo "----------------------------------------"
+    
+    # Yedekleri listele
+    declare -a backup_list
+    local counter=1
+    
+    while read -r backup; do
+        if [ -d "$BACKUP_DIR/$backup/dump/$DB_NAME" ]; then
+            backup_list+=("$backup")
+            local date_str=$(echo "$backup" | grep -o '[0-9]\{8\}_[0-9]\{6\}')
+            local formatted_date=$(format_date "$date_str")
+            local size=$(get_dir_size "$BACKUP_DIR/$backup")
+            echo "$counter) $formatted_date - $size"
+            ((counter++))
+        fi
+    done < <(find "$BACKUP_DIR" -maxdepth 1 -type d ! -path "$BACKUP_DIR" -exec basename {} \;)
+    
+    if [ ${#backup_list[@]} -eq 0 ]; then
+        warning "$MSG_NO_BACKUPS"
+        return
+    fi
+    
+    echo "----------------------------------------"
+    read -p "$PROMPT_BACKUP_CONTENT" choice
+    
+    if [ "$choice" = "0" ]; then
+        return
+    fi
+    
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#backup_list[@]} ]; then
+        error "$ERR_INVALID_CHOICE"
+    fi
+    
+    local backup_name="${backup_list[$((choice-1))]}"
+    local backup_path="$BACKUP_DIR/$backup_name"
+    
+    echo
+    info "$INFO_ANALYZING_BACKUP"
+    echo "----------------------------------------"
+    
+    # Yedek meta bilgilerini göster
+    if [ -f "$backup_path/backup.info" ]; then
+        echo "$INFO_BACKUP_INFO:"
+        cat "$backup_path/backup.info"
+        echo
+    fi
+    
+    # BSON dosyalarını analiz et
+    echo "$INFO_COLLECTIONS:"
+    find "$backup_path/dump/$DB_NAME" -name "*.bson" -exec basename {} .bson \;
+    
+    # Koleksiyon boyutlarını göster
+    echo
+    echo "$INFO_COLLECTION_SIZES:"
+    find "$backup_path/dump/$DB_NAME" -name "*.bson" -exec sh -c 'echo "$(basename {} .bson): $(du -h "{}" | cut -f1)"' \;
+    
+    echo "----------------------------------------"
+    read -p "$PROMPT_CONTINUE"
+}
+
+# Yedekleri karşılaştır
+compare_backups() {
+    echo
+    info "$INFO_COMPARE_BACKUPS"
+    echo "----------------------------------------"
+    
+    # Yedekleri listele
+    declare -a backup_list
+    local counter=1
+    
+    while read -r backup; do
+        if [ -d "$BACKUP_DIR/$backup/dump/$DB_NAME" ]; then
+            backup_list+=("$backup")
+            local date_str=$(echo "$backup" | grep -o '[0-9]\{8\}_[0-9]\{6\}')
+            local formatted_date=$(format_date "$date_str")
+            local size=$(get_dir_size "$BACKUP_DIR/$backup")
+            echo "$counter) $formatted_date - $size"
+            ((counter++))
+        fi
+    done < <(find "$BACKUP_DIR" -maxdepth 1 -type d ! -path "$BACKUP_DIR" -exec basename {} \;)
+    
+    if [ ${#backup_list[@]} -lt 2 ]; then
+        warning "$ERR_NOT_ENOUGH_BACKUPS"
+        return
+    fi
+    
+    echo "----------------------------------------"
+    read -p "$PROMPT_FIRST_BACKUP" first_choice
+    read -p "$PROMPT_SECOND_BACKUP" second_choice
+    
+    if ! [[ "$first_choice" =~ ^[0-9]+$ ]] || [ "$first_choice" -lt 1 ] || [ "$first_choice" -gt ${#backup_list[@]} ] || \
+       ! [[ "$second_choice" =~ ^[0-9]+$ ]] || [ "$second_choice" -lt 1 ] || [ "$second_choice" -gt ${#backup_list[@]} ] || \
+       [ "$first_choice" = "$second_choice" ]; then
+        error "$ERR_INVALID_CHOICE"
+    fi
+    
+    local first_backup="${backup_list[$((first_choice-1))]}"
+    local second_backup="${backup_list[$((second_choice-1))]}"
+    
+    echo
+    info "$INFO_COMPARING_BACKUPS"
+    echo "----------------------------------------"
+    
+    # Koleksiyonları karşılaştır
+    local first_path="$BACKUP_DIR/$first_backup/dump/$DB_NAME"
+    local second_path="$BACKUP_DIR/$second_backup/dump/$DB_NAME"
+    
+    echo "$INFO_COLLECTIONS_FIRST:"
+    find "$first_path" -name "*.bson" -exec basename {} .bson \; | sort > /tmp/first_collections.txt
+    
+    echo "$INFO_COLLECTIONS_SECOND:"
+    find "$second_path" -name "*.bson" -exec basename {} .bson \; | sort > /tmp/second_collections.txt
+    
+    echo
+    echo "$INFO_COLLECTION_DIFF:"
+    diff --color=auto /tmp/first_collections.txt /tmp/second_collections.txt || true
+    
+    echo
+    echo "$INFO_SIZE_COMPARISON:"
+    while read -r collection; do
+        if [ -f "$first_path/$collection.bson" ] && [ -f "$second_path/$collection.bson" ]; then
+            local size1=$(du -h "$first_path/$collection.bson" | cut -f1)
+            local size2=$(du -h "$second_path/$collection.bson" | cut -f1)
+            printf "%-30s %15s %15s\n" "$collection" "$size1" "$size2"
+        fi
+    done < /tmp/first_collections.txt
+    
+    # Geçici dosyaları temizle
+    rm -f /tmp/first_collections.txt /tmp/second_collections.txt
+    
+    echo "----------------------------------------"
+    read -p "$PROMPT_CONTINUE"
+}
+
 # Ana menü
 show_menu() {
     clear
@@ -702,7 +946,10 @@ show_menu() {
     echo "5) $MENU_CONTAINER_CHANGE"
     echo "6) $MENU_DATABASE_CHANGE"
     echo "7) $MENU_HISTORY"
-    echo "8) $MENU_EXIT"
+    echo "8) $MENU_DB_STATS"
+    echo "9) $MENU_BACKUP_CONTENT"
+    echo "10) $MENU_COMPARE_BACKUPS"
+    echo "11) $MENU_EXIT"
     echo "============================================"
 }
 
@@ -782,15 +1029,55 @@ while true; do
         continue
     fi
     
-    printf "$PROMPT_CHOICE_RANGE" 1 8
+    printf "$PROMPT_CHOICE_RANGE" 1 11
     read choice
     case $choice in
         1)  # Yedek Al
-            do_backup
+            if [ "$DB_NAME" != "all" ]; then
+                echo "1) $OPT_FULL_BACKUP"
+                echo "2) $OPT_COLLECTION_BACKUP"
+                read -p "$PROMPT_CHOICE (1/2): " backup_type
+                
+                case $backup_type in
+                    1)
+                        do_backup
+                        ;;
+                    2)
+                        if select_collections; then
+                            do_backup "selected"
+                        fi
+                        ;;
+                    *)
+                        warning "$ERR_INVALID_CHOICE"
+                        ;;
+                esac
+            else
+                do_backup
+            fi
             read -p "$PROMPT_CONTINUE"
             ;;
         2)  # Yedek Geri Yükle
-            do_restore
+            if [ "$DB_NAME" != "all" ]; then
+                echo "1) $OPT_FULL_RESTORE"
+                echo "2) $OPT_COLLECTION_RESTORE"
+                read -p "$PROMPT_CHOICE (1/2): " restore_type
+                
+                case $restore_type in
+                    1)
+                        do_restore
+                        ;;
+                    2)
+                        if select_collections; then
+                            do_restore "selected"
+                        fi
+                        ;;
+                    *)
+                        warning "$ERR_INVALID_CHOICE"
+                        ;;
+                esac
+            else
+                do_restore
+            fi
             read -p "$PROMPT_CONTINUE"
             ;;
         3)  # Yedekleri Listele
@@ -810,7 +1097,16 @@ while true; do
         7)  # Son İşlemler
             show_history
             ;;
-        8)  # Çıkış
+        8)  # Veritabanı İstatistikleri
+            show_db_stats
+            ;;
+        9)  # Yedek İçeriği
+            show_backup_content
+            ;;
+        10) # Yedekleri Karşılaştır
+            compare_backups
+            ;;
+        11) # Çıkış
             echo "Program sonlandırılıyor..."
             exit 0
             ;;
