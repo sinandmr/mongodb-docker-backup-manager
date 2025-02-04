@@ -49,7 +49,20 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'  # Eski mor
+INDIGO='\033[38;5;61m'  # Yeni yumuşak mor
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+ORANGE='\033[0;33m'
+BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
+
+# Menü renkleri
+MENU_COLOR="${CYAN}${BOLD}"
+HEADER_COLOR="${INDIGO}${BOLD}"  # Mor yerine yeni renk
+OPTION_COLOR="${WHITE}"
+SEPARATOR_COLOR="${BLUE}"
 
 # Varsayılan değerler
 CURRENT_DATE=$(date +%Y%m%d_%H%M%S)
@@ -67,16 +80,16 @@ log() {
 }
 
 error() {
-    echo -e "${RED}[HATA] $1${NC}" >&2
+    echo -e "${RED}[${BOLD}HATA${NC}${RED}] $1${NC}" >&2
     exit 1
 }
 
 warning() {
-    echo -e "${YELLOW}[UYARI] $1${NC}"
+    echo -e "${YELLOW}[${BOLD}UYARI${NC}${YELLOW}] $1${NC}"
 }
 
 info() {
-    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}${BOLD}$1${NC}"
 }
 
 # Docker container listesini al
@@ -419,13 +432,13 @@ do_backup() {
 list_backups() {
     echo
     info "$INFO_AVAILABLE_BACKUPS"
-    echo "----------------------------------------"
+    echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
     if [ -d "$BACKUP_DIR" ]; then
         declare -a backup_list
         local counter=1
         
-        printf "%-3s %-25s %-15s %-30s %s\n" "#" "$INFO_DATE" "$INFO_SIZE" "$INFO_BACKUP_DESC" "$INFO_SELECTED_DATABASE"
-        echo "--------------------------------------------------------------------------------"
+        echo -e "${CYAN}$(printf "%-3s %-25s %-15s %-30s %s\n" "#" "$INFO_DATE" "$INFO_SIZE" "$INFO_BACKUP_DESC" "$INFO_SELECTED_DATABASE")${NC}"
+        echo -e "${SEPARATOR_COLOR}--------------------------------------------------------------------------------${NC}"
         
         while read -r backup; do
             if [ "$DB_NAME" = "all" ]; then
@@ -442,7 +455,7 @@ list_backups() {
                         db_name=$(grep "^database=" "$BACKUP_DIR/$backup/backup.info" | cut -d= -f2)
                     fi
                     
-                    printf "%-3d %-25s %-15s %-30s %s\n" "$counter" "$formatted_date" "$size" "$description" "$db_name"
+                    echo -e "${DIM}$(printf "%-3d %-25s %-15s %-30s %s\n" "$counter" "$formatted_date" "$size" "$description" "$db_name")${NC}"
                     ((counter++))
                 fi
             else
@@ -458,7 +471,7 @@ list_backups() {
                         description=$(grep "^description=" "$BACKUP_DIR/$backup/backup.info" | cut -d= -f2)
                     fi
                     
-                    printf "%-3d %-25s %-15s %-30s %s\n" "$counter" "$formatted_date" "$size" "$description" "$db_name"
+                    echo -e "${DIM}$(printf "%-3d %-25s %-15s %-30s %s\n" "$counter" "$formatted_date" "$size" "$description" "$db_name")${NC}"
                     ((counter++))
                 fi
             fi
@@ -470,15 +483,15 @@ list_backups() {
     else
         warning "$MSG_NO_BACKUPS"
     fi
-    echo "----------------------------------------"
+    echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
     
     # Son işlemleri göster
     if [ -f "/tmp/mongo_backup_history.log" ]; then
         echo
         info "$INFO_BACKUP_HISTORY"
-        echo "----------------------------------------"
-        cat "/tmp/mongo_backup_history.log"
-        echo "----------------------------------------"
+        echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
+        echo -e "${DIM}$(cat "/tmp/mongo_backup_history.log")${NC}"
+        echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
     fi
     
     read -p "$PROMPT_CONTINUE"
@@ -770,7 +783,7 @@ select_collections() {
 show_backup_content() {
     echo
     info "$INFO_BACKUP_CONTENT"
-    echo "----------------------------------------"
+    echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
     
     # Yedekleri listele
     declare -a backup_list
@@ -792,7 +805,7 @@ show_backup_content() {
         return
     fi
     
-    echo "----------------------------------------"
+    echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
     read -p "$PROMPT_BACKUP_CONTENT" choice
     
     if [ "$choice" = "0" ]; then
@@ -808,25 +821,32 @@ show_backup_content() {
     
     echo
     info "$INFO_ANALYZING_BACKUP"
-    echo "----------------------------------------"
+    echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
     
-    # Yedek meta bilgilerini göster
+    # Yedek meta bilgilerini tablo formatında göster
     if [ -f "$backup_path/backup.info" ]; then
-        echo "$INFO_BACKUP_INFO:"
-        cat "$backup_path/backup.info"
+        echo -e "${CYAN}$INFO_BACKUP_INFO:${NC}"
+        echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
+        echo -e "${DIM}$(printf "%-20s %s\n" "Açıklama:" "$(grep "^description=" "$backup_path/backup.info" | cut -d= -f2)")${NC}"
+        echo -e "${DIM}$(printf "%-20s %s\n" "Tarih:" "$(grep "^date=" "$backup_path/backup.info" | cut -d= -f2)")${NC}"
+        echo -e "${DIM}$(printf "%-20s %s\n" "Veritabanı:" "$(grep "^database=" "$backup_path/backup.info" | cut -d= -f2)")${NC}"
+        echo -e "${DIM}$(printf "%-20s %s\n" "Container:" "$(grep "^container=" "$backup_path/backup.info" | cut -d= -f2)")${NC}"
         echo
     fi
     
-    # BSON dosyalarını analiz et
-    echo "$INFO_COLLECTIONS:"
-    find "$backup_path/dump/$DB_NAME" -name "*.bson" -exec basename {} .bson \;
+    # Koleksiyon bilgilerini tablo formatında göster
+    echo -e "${CYAN}$INFO_COLLECTIONS ve $INFO_COLLECTION_SIZES:${NC}"
+    echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
+    echo -e "${DIM}$(printf "%-30s %15s\n" "Koleksiyon" "Boyut")${NC}"
+    echo -e "${SEPARATOR_COLOR}$(printf "%47s\n" | tr " " "-")${NC}"
     
-    # Koleksiyon boyutlarını göster
-    echo
-    echo "$INFO_COLLECTION_SIZES:"
-    find "$backup_path/dump/$DB_NAME" -name "*.bson" -exec sh -c 'echo "$(basename {} .bson): $(du -h "{}" | cut -f1)"' \;
+    while read -r collection; do
+        local collection_name=$(basename "$collection" .bson)
+        local size=$(du -h "$collection" | cut -f1)
+        echo -e "${DIM}$(printf "%-30s %15s\n" "$collection_name" "$size")${NC}"
+    done < <(find "$backup_path/dump/$DB_NAME" -name "*.bson" | sort)
     
-    echo "----------------------------------------"
+    echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
     read -p "$PROMPT_CONTINUE"
 }
 
@@ -907,9 +927,9 @@ compare_backups() {
 # Ana menü
 show_menu() {
     clear
-    echo "============================================"
-    echo "       $MENU_TITLE         "
-    echo "============================================"
+    echo -e "${HEADER_COLOR}============================================${NC}"
+    echo -e "${MENU_COLOR}       $MENU_TITLE         ${NC}"
+    echo -e "${HEADER_COLOR}============================================${NC}"
     
     # Container ve auth bilgilerini yükle
     if [ -f /tmp/mongo_container.conf ]; then
@@ -920,37 +940,37 @@ show_menu() {
     fi
     
     if [ -n "$CONTAINER_NAME" ]; then
-        info "$INFO_SELECTED_CONTAINER: $CONTAINER_NAME"
+        info "$INFO_SELECTED_CONTAINER: ${WHITE}$CONTAINER_NAME${NC}"
         if [ -n "$MONGO_USER" ]; then
-            info "$INFO_AUTH: $MONGO_USER@$AUTH_DB"
+            info "$INFO_AUTH: ${WHITE}$MONGO_USER@$AUTH_DB${NC}"
         fi
     fi
     if [ -n "$DB_NAME" ]; then
-        info "$INFO_SELECTED_DATABASE: $DB_NAME"
+        info "$INFO_SELECTED_DATABASE: ${WHITE}$DB_NAME${NC}"
     fi
-    echo "----------------------------------------"
+    echo -e "${SEPARATOR_COLOR}----------------------------------------${NC}"
     
     # Container seçili değilse sadece container seçim ve çıkış seçeneklerini göster
     if [ -z "$CONTAINER_ID" ]; then
-        echo "1) $MENU_CONTAINER_SELECT"
-        echo "2) $MENU_EXIT"
-        echo "============================================"
+        echo -e "${OPTION_COLOR}1) $MENU_CONTAINER_SELECT"
+        echo -e "2) $MENU_EXIT${NC}"
+        echo -e "${HEADER_COLOR}============================================${NC}"
         return
     fi
     
     # Container seçili ise diğer seçenekleri göster
-    echo "1) $MENU_BACKUP"
-    echo "2) $MENU_RESTORE"
-    echo "3) $MENU_LIST"
-    echo "4) $MENU_DELETE"
-    echo "5) $MENU_CONTAINER_CHANGE"
-    echo "6) $MENU_DATABASE_CHANGE"
-    echo "7) $MENU_HISTORY"
-    echo "8) $MENU_DB_STATS"
-    echo "9) $MENU_BACKUP_CONTENT"
-    echo "10) $MENU_COMPARE_BACKUPS"
-    echo "11) $MENU_EXIT"
-    echo "============================================"
+    echo -e "${OPTION_COLOR}1) $MENU_BACKUP"
+    echo -e "2) $MENU_RESTORE"
+    echo -e "3) $MENU_LIST"
+    echo -e "4) $MENU_DELETE"
+    echo -e "5) $MENU_CONTAINER_CHANGE"
+    echo -e "6) $MENU_DATABASE_CHANGE"
+    echo -e "7) $MENU_HISTORY"
+    echo -e "8) $MENU_DB_STATS"
+    echo -e "9) $MENU_BACKUP_CONTENT"
+    echo -e "10) $MENU_COMPARE_BACKUPS"
+    echo -e "11) $MENU_EXIT${NC}"
+    echo -e "${HEADER_COLOR}============================================${NC}"
 }
 
 # Program başlangıcında geçici dosyaları temizle
