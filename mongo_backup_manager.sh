@@ -6,6 +6,41 @@
 
 # Kullanım: ./mongo_backup_manager.sh
 
+# Dil seçimi için fonksiyon
+select_language() {
+    clear
+    echo "============================================"
+    echo "       Language Selection / Dil Seçimi      "
+    echo "============================================"
+    echo "1) Türkçe"
+    echo "2) English"
+    echo "----------------------------------------"
+    read -p "Select language / Dil seçin (1/2): " lang_choice
+
+    case $lang_choice in
+        1)
+            LANG_FILE="lang/tr.sh"
+            ;;
+        2)
+            LANG_FILE="lang/en.sh"
+            ;;
+        *)
+            LANG_FILE="lang/tr.sh"  # Varsayılan olarak Türkçe
+            ;;
+    esac
+
+    # Dil dosyasını yükle
+    if [ -f "$LANG_FILE" ]; then
+        source "$LANG_FILE"
+    else
+        echo "Error: Language file not found! / Hata: Dil dosyası bulunamadı!"
+        exit 1
+    fi
+}
+
+# Program başlangıcında dil seçimi yap
+select_language
+
 # Konsolu temizle
 clear
 
@@ -77,7 +112,7 @@ select_container() {
     done < <(get_containers)
     
     if [ $counter -eq 1 ]; then
-        error "Çalışan MongoDB container'ı bulunamadı!"
+        error "$ERR_NO_CONTAINERS"
     fi
     
     echo "----------------------------------------"
@@ -85,15 +120,15 @@ select_container() {
     
     # Eğer tek container varsa otomatik seç
     if [ $max_choice -eq 1 ]; then
-        log "Tek container mevcut olduğu için otomatik seçildi: ${container_names[0]}"
+        log "$MSG_SINGLE_CONTAINER: ${container_names[0]}"
         sleep 2  # 2 saniye bekle
         CONTAINER_ID="${container_ids[0]}"
         CONTAINER_NAME="${container_names[0]}"
     else
-        read -p "Container numarasını girin (1-$max_choice): " choice
+        read -p "$PROMPT_CHOICE (1-$max_choice): " choice
         
         if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt $max_choice ]; then
-            error "Geçersiz seçim!"
+            error "$ERR_INVALID_CHOICE"
         fi
         
         # Seçilen container'ın bilgilerini al (0-based index)
@@ -107,12 +142,12 @@ select_container() {
     echo "CONTAINER_NAME='$CONTAINER_NAME'" >> /tmp/mongo_container.conf
     
     # Önce auth olmadan bağlantıyı dene
-    log "MongoDB bağlantısı test ediliyor..."
+    log "$MSG_TESTING_CONNECTION"
     if ! test_mongo_connection "$CONTAINER_ID"; then
-        warning "Auth gerektiren bir MongoDB instance'ı tespit edildi."
+        warning "$MSG_AUTH_REQUIRED"
         get_mongo_credentials
     else
-        log "Bağlantı başarılı (auth gerektirmiyor)"
+        log "$MSG_AUTH_SUCCESS"
         # Auth gerektirmediği için auth bilgilerini temizle
         MONGO_USER=""
         MONGO_PASS=""
@@ -124,7 +159,7 @@ select_container() {
 # MongoDB kimlik bilgilerini al
 get_mongo_credentials() {
     echo
-    info "MongoDB Kimlik Doğrulama"
+    info "$INFO_AUTH"
     echo "----------------------------------------"
     
     local max_attempts=3
@@ -143,24 +178,24 @@ get_mongo_credentials() {
         echo "AUTH_DB=$AUTH_DB" >> /tmp/mongo_auth.conf
         
         # Bağlantıyı test et
-        log "Kimlik bilgileri test ediliyor..."
+        log "$MSG_AUTH_TESTING"
         if docker exec "$CONTAINER_ID" mongosh --quiet --username "$MONGO_USER" --password "$MONGO_PASS" --authenticationDatabase "$AUTH_DB" --eval "db.getMongo().getDBs()" &>/dev/null; then
-            log "Kimlik doğrulama başarılı"
+            log "$MSG_AUTH_SUCCESS"
             return 0
         else
-            warning "Kimlik doğrulama başarısız! (Deneme $attempt/$max_attempts)"
+            warning "$ERR_AUTH_FAILED (Deneme $attempt/$max_attempts)"
             ((attempt++))
             
             if [ $attempt -le $max_attempts ]; then
-                read -p "Tekrar denemek ister misiniz? (E/h): " retry
+                read -p "$PROMPT_RETRY" retry
                 if [[ $retry =~ ^[Hh]$ ]]; then
-                    error "Kimlik doğrulama iptal edildi!"
+                    error "$ERR_AUTH_FAILED"
                 fi
             fi
         fi
     done
     
-    error "Maksimum deneme sayısına ulaşıldı!"
+    error "$ERR_MAX_ATTEMPTS"
 }
 
 # Veritabanı listesini al
@@ -218,46 +253,46 @@ select_backup_dir() {
     local default_dir=$(get_default_backup_dir)
     
     echo
-    info "Yedek Dizini Seçimi"
-    info "İşletim Sistemi: $(uname -s)"
+    info "$INFO_BACKUP_DIR"
+    info "$INFO_OS: $(uname -s)"
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        info "Dağıtım: $NAME"
+        info "$INFO_DISTRIBUTION: $NAME"
     fi
     echo "----------------------------------------"
-    echo "1) Varsayılan dizin ($default_dir)"
-    echo "2) Özel dizin belirtin"
-    read -p "Seçiminiz (1/2): " choice
+    echo "1) $OPT_DEFAULT_DIR ($default_dir)"
+    echo "2) $OPT_CUSTOM_DIR"
+    read -p "$PROMPT_CHOICE (1/2): " choice
 
     case $choice in
         1)
             BACKUP_DIR="$default_dir"
             ;;
         2)
-            read -p "Yedek dizini tam yolu: " BACKUP_DIR
+            read -p "$PROMPT_BACKUP_DIR: " BACKUP_DIR
             ;;
         *)
             BACKUP_DIR="$default_dir"
-            warning "Geçersiz seçim. Varsayılan dizin kullanılıyor."
+            warning "$ERR_INVALID_CHOICE $OPT_DEFAULT_DIR"
             ;;
     esac
 
     # Dizin oluşturma izinlerini kontrol et
     if ! mkdir -p "$BACKUP_DIR" 2>/dev/null; then
-        warning "Dizin oluşturulamadı: $BACKUP_DIR"
+        warning "$ERR_DIR_CREATE: $BACKUP_DIR"
         warning "Sudo ile deneniyor..."
-        sudo mkdir -p "$BACKUP_DIR" || error "Dizin oluşturulamadı!"
-        sudo chown $(whoami) "$BACKUP_DIR" || error "Dizin izinleri ayarlanamadı!"
+        sudo mkdir -p "$BACKUP_DIR" || error "$ERR_DIR_CREATE"
+        sudo chown $(whoami) "$BACKUP_DIR" || error "$ERR_DIR_PERMS"
     fi
 
-    info "Yedek dizini: $BACKUP_DIR"
+    info "$INFO_BACKUP_DIR: $BACKUP_DIR"
     info "Dizin izinleri: $(ls -ld "$BACKUP_DIR")"
 }
 
 # Veritabanı seç
 select_database() {
     echo
-    info "Veritabanı Listesi:"
+    info "$INFO_AVAILABLE_BACKUPS"
     echo "----------------------------------------"
     
     # Veritabanı listesini diziye al
@@ -266,7 +301,7 @@ select_database() {
     
     # Tüm veritabanları seçeneğini ekle
     db_list+=("all")
-    echo "$counter) Tüm Veritabanları"
+    echo "$counter) $OPT_ALL_DBS"
     ((counter++))
     
     # MongoDB'den veritabanı listesini al
@@ -282,22 +317,22 @@ select_database() {
     local max_choice=$((counter - 1))
     
     if [ $max_choice -eq 1 ]; then
-        error "Veritabanı listesi alınamadı!"
+        error "$ERR_NO_DATABASE"
     fi
     
-    read -p "Veritabanı numarasını girin (1-$max_choice): " choice
+    read -p "$PROMPT_CHOICE (1-$max_choice): " choice
     
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt $max_choice ]; then
-        error "Geçersiz seçim!"
+        error "$ERR_INVALID_CHOICE"
     fi
     
     # Seçilen veritabanını al (0-based index)
     DB_NAME="${db_list[$((choice-1))]}"
     
     if [ "$DB_NAME" = "all" ]; then
-        info "Tüm veritabanları seçildi"
+        info "$OPT_ALL_DBS"
     else
-        info "Seçilen veritabanı: $DB_NAME"
+        info "$INFO_SELECTED_DATABASE: $DB_NAME"
     fi
 }
 
@@ -337,15 +372,15 @@ format_date() {
 # Yedekleme işlemi
 do_backup() {
     echo
-    info "Yedek Açıklaması"
-    read -p "Bu yedek için bir açıklama girin: " backup_description
-    backup_description=${backup_description:-"Açıklama girilmedi"}
+    info "$INFO_BACKUP_DESC"
+    read -p "$MSG_ENTER_BACKUP_DESC: " backup_description
+    backup_description=${backup_description:-"$MSG_DEFAULT_DESC"}
     
     local backup_path="${BACKUP_DIR}/${DB_NAME}_${CURRENT_DATE}"
     
-    log "Yedekleme başlatılıyor..."
+    log "$MSG_BACKUP_STARTED"
     
-    log "MongoDB dump işlemi başlatılıyor..."
+    log "$MSG_BACKUP_STARTED"
     local mongo_cmd="mongodump"
     
     if [ -n "$MONGO_USER" ] && [ -n "$MONGO_PASS" ]; then
@@ -357,13 +392,13 @@ do_backup() {
     docker exec "$CONTAINER_ID" mkdir -p /dump
 
     if [ "$DB_NAME" = "all" ]; then
-        docker exec "$CONTAINER_ID" $mongo_cmd --out /dump || error "MongoDB dump işlemi başarısız!"
+        docker exec "$CONTAINER_ID" $mongo_cmd --out /dump || error "$ERR_BACKUP_FAILED"
         mkdir -p "$backup_path/dump"
-        docker cp "${CONTAINER_ID}:/dump/." "$backup_path/dump/" || error "Yedek dosyaları kopyalanamadı!"
+        docker cp "${CONTAINER_ID}:/dump/." "$backup_path/dump/" || error "$ERR_COPY_FAILED"
     else
-        docker exec "$CONTAINER_ID" $mongo_cmd --db "$DB_NAME" --out /dump || error "MongoDB dump işlemi başarısız!"
+        docker exec "$CONTAINER_ID" $mongo_cmd --db "$DB_NAME" --out /dump || error "$ERR_BACKUP_FAILED"
         mkdir -p "$backup_path/dump"
-        docker cp "${CONTAINER_ID}:/dump/$DB_NAME/." "$backup_path/dump/$DB_NAME/" || error "Yedek dosyaları kopyalanamadı!"
+        docker cp "${CONTAINER_ID}:/dump/$DB_NAME/." "$backup_path/dump/$DB_NAME/" || error "$ERR_COPY_FAILED"
     fi
 
     docker exec "$CONTAINER_ID" rm -rf /dump
@@ -375,21 +410,21 @@ do_backup() {
     echo "container=$CONTAINER_NAME" >> "$backup_path/backup.info"
     
     local backup_size=$(get_dir_size "$backup_path")
-    log_history "Yedek alındı" "$DB_NAME - $backup_description ($backup_size)"
+    log_history "$MSG_BACKUP_COMPLETED" "$DB_NAME - $backup_description ($backup_size)"
     
-    log "Yedekleme tamamlandı: $backup_path ($backup_size)"
+    log "$MSG_BACKUP_COMPLETED: $backup_path ($backup_size)"
 }
 
 # Yedekleri listele
 list_backups() {
     echo
-    info "Mevcut Yedekler:"
+    info "$INFO_AVAILABLE_BACKUPS"
     echo "----------------------------------------"
     if [ -d "$BACKUP_DIR" ]; then
         declare -a backup_list
         local counter=1
         
-        printf "%-3s %-25s %-15s %-30s %s\n" "#" "Tarih" "Boyut" "Açıklama" "Veritabanı"
+        printf "%-3s %-25s %-15s %-30s %s\n" "#" "$INFO_DATE" "$INFO_SIZE" "$INFO_BACKUP_DESC" "$INFO_SELECTED_DATABASE"
         echo "--------------------------------------------------------------------------------"
         
         while read -r backup; do
@@ -399,8 +434,8 @@ list_backups() {
                     local date_str=$(echo "$backup" | grep -o '[0-9]\{8\}_[0-9]\{6\}')
                     local formatted_date=$(format_date "$date_str")
                     local size=$(get_dir_size "$BACKUP_DIR/$backup")
-                    local description="Açıklama yok"
-                    local db_name="Tüm VT"
+                    local description="$MSG_DEFAULT_DESC"
+                    local db_name="$OPT_ALL_DBS"
                     
                     if [ -f "$BACKUP_DIR/$backup/backup.info" ]; then
                         description=$(grep "^description=" "$BACKUP_DIR/$backup/backup.info" | cut -d= -f2)
@@ -416,7 +451,7 @@ list_backups() {
                     local date_str=$(echo "$backup" | grep -o '[0-9]\{8\}_[0-9]\{6\}')
                     local formatted_date=$(format_date "$date_str")
                     local size=$(get_dir_size "$BACKUP_DIR/$backup")
-                    local description="Açıklama yok"
+                    local description="$MSG_DEFAULT_DESC"
                     local db_name="$DB_NAME"
                     
                     if [ -f "$BACKUP_DIR/$backup/backup.info" ]; then
@@ -430,29 +465,29 @@ list_backups() {
         done < <(find "$BACKUP_DIR" -maxdepth 1 -type d ! -path "$BACKUP_DIR" -exec basename {} \;)
         
         if [ ${#backup_list[@]} -eq 0 ]; then
-            warning "Henüz yedek bulunmuyor."
+            warning "$MSG_NO_BACKUPS"
         fi
     else
-        warning "Henüz yedek bulunmuyor."
+        warning "$MSG_NO_BACKUPS"
     fi
     echo "----------------------------------------"
     
     # Son işlemleri göster
     if [ -f "/tmp/mongo_backup_history.log" ]; then
         echo
-        info "Son İşlemler:"
+        info "$INFO_BACKUP_HISTORY"
         echo "----------------------------------------"
         cat "/tmp/mongo_backup_history.log"
         echo "----------------------------------------"
     fi
     
-    read -p "Devam etmek için ENTER tuşuna basın..."
+    read -p "$PROMPT_CONTINUE"
 }
 
 # Geri yükleme işlemi
 do_restore() {
     echo
-    info "Mevcut Yedekler:"
+    info "$INFO_AVAILABLE_BACKUPS"
     echo "----------------------------------------"
     
     # Yedekleri numaralandır
@@ -478,15 +513,15 @@ do_restore() {
     done < <(find "$BACKUP_DIR" -maxdepth 1 -type d ! -path "$BACKUP_DIR" -exec basename {} \;)
     
     if [ ${#backup_list[@]} -eq 0 ]; then
-        error "Henüz yedek bulunmuyor!"
+        error "$MSG_NO_BACKUPS"
     fi
     
     echo "----------------------------------------"
     local max_choice=${#backup_list[@]}
-    read -p "Geri yüklenecek yedeğin numarasını girin (1-$max_choice): " choice
+    read -p "$PROMPT_BACKUP_NUMBER (1-$max_choice): " choice
     
     if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt $max_choice ]; then
-        error "Geçersiz seçim!"
+        error "$ERR_INVALID_CHOICE"
     fi
     
     # Seçilen yedeğin adını al
@@ -494,31 +529,31 @@ do_restore() {
     local restore_path="$BACKUP_DIR/$backup_name"
     
     if [ ! -d "$restore_path" ]; then
-        error "Belirtilen yedek dizini bulunamadı: $restore_path"
+        error "$ERR_BACKUP_NOT_FOUND: $restore_path"
     fi
 
     echo
-    info "Geri yükleme Seçenekleri:"
-    echo "1) Mevcut verileri sil ve yedeği yükle"
-    echo "2) Mevcut verileri koru ve yedeği yükle"
-    read -p "Seçiminiz (1/2): " restore_choice
+    info "$INFO_RESTORE_OPTIONS"
+    echo "1) $OPT_RESTORE_DROP"
+    echo "2) $OPT_RESTORE_KEEP"
+    read -p "$PROMPT_CHOICE (1/2): " restore_choice
 
-    log "Geri yükleme başlatılıyor..."
+    log "$MSG_RESTORE_STARTED"
     
     # Container'da geçici dizin oluştur
     docker exec "$CONTAINER_ID" rm -rf /dump
     docker exec "$CONTAINER_ID" mkdir -p /dump
 
     # Yedeği container'a kopyala
-    log "Yedek dosyaları container'a kopyalanıyor..."
+    log "$MSG_COPYING_FILES"
     if [ "$DB_NAME" = "all" ]; then
-        docker cp "$restore_path/dump/." "${CONTAINER_ID}:/dump/" || error "Yedek dosyaları kopyalanamadı!"
+        docker cp "$restore_path/dump/." "${CONTAINER_ID}:/dump/" || error "$ERR_COPY_FAILED"
     else
-        docker cp "$restore_path/dump/$DB_NAME/." "${CONTAINER_ID}:/dump/$DB_NAME/" || error "Yedek dosyaları kopyalanamadı!"
+        docker cp "$restore_path/dump/$DB_NAME/." "${CONTAINER_ID}:/dump/$DB_NAME/" || error "$ERR_COPY_FAILED"
     fi
 
     # Restore işlemi
-    log "MongoDB restore işlemi başlatılıyor..."
+    log "$MSG_RESTORE_STARTED"
     local mongo_cmd="mongorestore"
     
     if [ -n "$MONGO_USER" ] && [ -n "$MONGO_PASS" ]; then
@@ -527,27 +562,93 @@ do_restore() {
 
     if [ "$restore_choice" = "1" ]; then
         if [ "$DB_NAME" = "all" ]; then
-            docker exec "$CONTAINER_ID" $mongo_cmd --drop /dump || error "MongoDB restore işlemi başarısız!"
+            docker exec "$CONTAINER_ID" $mongo_cmd --drop /dump || error "$ERR_RESTORE_FAILED"
         else
-            docker exec "$CONTAINER_ID" $mongo_cmd --nsInclude="${DB_NAME}.*" --drop /dump || error "MongoDB restore işlemi başarısız!"
+            docker exec "$CONTAINER_ID" $mongo_cmd --nsInclude="${DB_NAME}.*" --drop /dump || error "$ERR_RESTORE_FAILED"
         fi
     else
         if [ "$DB_NAME" = "all" ]; then
-            docker exec "$CONTAINER_ID" $mongo_cmd /dump || error "MongoDB restore işlemi başarısız!"
+            docker exec "$CONTAINER_ID" $mongo_cmd /dump || error "$ERR_RESTORE_FAILED"
         else
-            docker exec "$CONTAINER_ID" $mongo_cmd --nsInclude="${DB_NAME}.*" /dump || error "MongoDB restore işlemi başarısız!"
+            docker exec "$CONTAINER_ID" $mongo_cmd --nsInclude="${DB_NAME}.*" /dump || error "$ERR_RESTORE_FAILED"
         fi
     fi
 
     docker exec "$CONTAINER_ID" rm -rf /dump
-    log "Geri yükleme tamamlandı"
+    log "$MSG_RESTORE_COMPLETED"
+}
+
+# Yedek sil
+delete_backup() {
+    echo
+    info "$INFO_DELETABLE_BACKUPS"
+    echo "----------------------------------------"
+    
+    # Yedekleri numaralandır
+    declare -a backup_list
+    local counter=1
+    
+    printf "%-3s %-25s %-15s %-30s %s\n" "#" "$INFO_DATE" "$INFO_SIZE" "$INFO_BACKUP_DESC" "$INFO_SELECTED_DATABASE"
+    echo "--------------------------------------------------------------------------------"
+    
+    # Önce tüm yedekleri bir diziye al
+    while read -r backup; do
+        if [ -d "$BACKUP_DIR/$backup/$DB_NAME" ] || [ -d "$BACKUP_DIR/$backup/dump/$DB_NAME" ]; then
+            backup_list+=("$backup")
+            local date_str=$(echo "$backup" | grep -o '[0-9]\{8\}_[0-9]\{6\}')
+            local formatted_date=$(format_date "$date_str")
+            local size=$(get_dir_size "$BACKUP_DIR/$backup")
+            local description="$MSG_DEFAULT_DESC"
+            local db_name="$DB_NAME"
+            
+            if [ -f "$BACKUP_DIR/$backup/backup.info" ]; then
+                description=$(grep "^description=" "$BACKUP_DIR/$backup/backup.info" | cut -d= -f2)
+                db_name=$(grep "^database=" "$BACKUP_DIR/$backup/backup.info" | cut -d= -f2)
+            fi
+            
+            printf "%-3d %-25s %-15s %-30s %s\n" "$counter" "$formatted_date" "$size" "$description" "$db_name"
+            ((counter++))
+        fi
+    done < <(find "$BACKUP_DIR" -maxdepth 1 -type d ! -path "$BACKUP_DIR" -exec basename {} \;)
+    
+    if [ ${#backup_list[@]} -eq 0 ]; then
+        warning "$MSG_NO_BACKUPS"
+        return
+    fi
+    
+    echo "----------------------------------------"
+    local max_choice=${#backup_list[@]}
+    read -p "$PROMPT_DELETE_NUMBER" choice
+    
+    if [ "$choice" = "0" ]; then
+        return
+    fi
+    
+    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt $max_choice ]; then
+        error "$ERR_INVALID_CHOICE"
+    fi
+    
+    # Seçilen yedeğin adını al
+    local backup_name="${backup_list[$((choice-1))]}"
+    local backup_path="$BACKUP_DIR/$backup_name"
+    
+    echo
+    info "$MSG_WARNING: $backup_name"
+    read -p "$MSG_CONFIRM_DELETE (e/H): " confirm
+    
+    if [ "$confirm" = "e" ] || [ "$confirm" = "E" ]; then
+        rm -rf "$backup_path"
+        log "$MSG_BACKUP_DELETED: $backup_path"
+    else
+        warning "$MSG_DELETE_CANCELLED"
+    fi
 }
 
 # Ana menü
 show_menu() {
     clear
     echo "============================================"
-    echo "       MongoDB Yedekleme Yöneticisi         "
+    echo "       $MENU_TITLE         "
     echo "============================================"
     
     # Container ve auth bilgilerini yükle
@@ -559,91 +660,33 @@ show_menu() {
     fi
     
     if [ -n "$CONTAINER_NAME" ]; then
-        info "Seçili Container: $CONTAINER_NAME"
+        info "$INFO_SELECTED_CONTAINER: $CONTAINER_NAME"
         if [ -n "$MONGO_USER" ]; then
-            info "Kimlik Doğrulama: $MONGO_USER@$AUTH_DB"
+            info "$INFO_AUTH: $MONGO_USER@$AUTH_DB"
         fi
     fi
     if [ -n "$DB_NAME" ]; then
-        info "Seçili Veritabanı: $DB_NAME"
+        info "$INFO_SELECTED_DATABASE: $DB_NAME"
     fi
     echo "----------------------------------------"
     
     # Container seçili değilse sadece container seçim ve çıkış seçeneklerini göster
     if [ -z "$CONTAINER_ID" ]; then
-        echo "1) Container Seç"
-        echo "2) Çıkış"
+        echo "1) $MENU_CONTAINER_SELECT"
+        echo "2) $MENU_EXIT"
         echo "============================================"
         return
     fi
     
     # Container seçili ise diğer seçenekleri göster
-    if [ -z "$DB_NAME" ]; then
-        echo "1) Veritabanı Seç"
-    else
-        echo "1) Yedek Al"
-        echo "2) Yedek Geri Yükle"
-        echo "3) Yedekleri Listele"
-        echo "4) Yedek Sil"
-        echo "5) Container Değiştir"
-        echo "6) Veritabanı Değiştir"
-        echo "7) Çıkış"
-    fi
+    echo "1) $MENU_BACKUP"
+    echo "2) $MENU_RESTORE"
+    echo "3) $MENU_LIST"
+    echo "4) $MENU_DELETE"
+    echo "5) $MENU_CONTAINER_CHANGE"
+    echo "6) $MENU_DATABASE_CHANGE"
+    echo "7) $MENU_EXIT"
     echo "============================================"
-}
-
-# Yedek sil
-delete_backup() {
-    echo
-    info "Silinebilecek Yedekler:"
-    echo "----------------------------------------"
-    
-    # Yedekleri numaralandır
-    declare -a backup_list
-    local counter=1
-    local backups_file="/tmp/backups.txt"
-    rm -f "$backups_file"
-    
-    # Önce tüm yedekleri bir diziye al
-    while read -r backup; do
-        if [ -d "$BACKUP_DIR/$backup/$DB_NAME" ] || [ -d "$BACKUP_DIR/$backup/dump/$DB_NAME" ]; then
-            backup_list+=("$backup")
-            echo "$counter) $backup" | tee -a "$backups_file"
-            ((counter++))
-        fi
-    done < <(find "$BACKUP_DIR" -maxdepth 1 -type d ! -path "$BACKUP_DIR" -exec basename {} \;)
-    
-    if [ ${#backup_list[@]} -eq 0 ]; then
-        warning "Silinebilecek yedek bulunmuyor."
-        return
-    fi
-    
-    echo "----------------------------------------"
-    local max_choice=${#backup_list[@]}
-    read -p "Silmek istediğiniz yedeğin numarasını girin (iptal için 0): " choice
-    
-    if [ "$choice" = "0" ]; then
-        return
-    fi
-    
-    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt $max_choice ]; then
-        error "Geçersiz seçim!"
-    fi
-    
-    # Seçilen yedeğin adını al
-    local backup_name="${backup_list[$((choice-1))]}"
-    local backup_path="$BACKUP_DIR/$backup_name"
-    
-    echo
-    info "DİKKAT: $backup_name yedeği silinecek!"
-    read -p "Onaylıyor musunuz? (e/H): " confirm
-    
-    if [ "$confirm" = "e" ] || [ "$confirm" = "E" ]; then
-        rm -rf "$backup_path"
-        log "Yedek silindi: $backup_path"
-    else
-        warning "Silme işlemi iptal edildi."
-    fi
 }
 
 # Program başlangıcında geçici dosyaları temizle
@@ -660,6 +703,9 @@ select_backup_dir
 
 # İlk container seçimini yap
 select_container
+
+# Container seçildikten sonra doğrudan veritabanı seçimine git
+select_database
 
 # Tab completion için fonksiyon
 _mongo_backup_completion() {
@@ -700,67 +746,57 @@ while true; do
     show_menu
     
     if [ -z "$CONTAINER_ID" ]; then
-        read -p "Seçiminiz (1-2): " choice
+        printf "$PROMPT_CHOICE_RANGE" 1 2
+        read choice
         case $choice in
             1)  # Container Seç
                 select_container
+                select_database  # Container seçiminden sonra doğrudan veritabanı seçimine git
                 ;;
             2)  # Çıkış
                 echo "Program sonlandırılıyor..."
                 exit 0
                 ;;
             *)
-                warning "Geçersiz seçim!"
-                read -p "Devam etmek için ENTER tuşuna basın..."
+                warning "$ERR_INVALID_CHOICE"
+                read -p "$PROMPT_CONTINUE"
                 ;;
         esac
         continue
     fi
     
-    if [ -z "$DB_NAME" ]; then
-        read -p "Seçiminiz (1): " choice
-        case $choice in
-            1)  # Veritabanı Seç
-                select_database
-                ;;
-            *)
-                warning "Geçersiz seçim!"
-                read -p "Devam etmek için ENTER tuşuna basın..."
-                ;;
-        esac
-    else
-        read -p "Seçiminiz (1-7): " choice
-        case $choice in
-            1)  # Yedek Al
-                do_backup
-                read -p "Devam etmek için ENTER tuşuna basın..."
-                ;;
-            2)  # Yedek Geri Yükle
-                do_restore
-                read -p "Devam etmek için ENTER tuşuna basın..."
-                ;;
-            3)  # Yedekleri Listele
-                list_backups
-                ;;
-            4)  # Yedek Sil
-                delete_backup
-                read -p "Devam etmek için ENTER tuşuna basın..."
-                ;;
-            5)  # Container Değiştir
-                select_container
-                DB_NAME=""  # Yeni container seçildiğinde veritabanı seçimini sıfırla
-                ;;
-            6)  # Veritabanı Değiştir
-                select_database
-                ;;
-            7)  # Çıkış
-                echo "Program sonlandırılıyor..."
-                exit 0
-                ;;
-            *)
-                warning "Geçersiz seçim!"
-                read -p "Devam etmek için ENTER tuşuna basın..."
-                ;;
-        esac
-    fi
+    printf "$PROMPT_CHOICE_RANGE" 1 7
+    read choice
+    case $choice in
+        1)  # Yedek Al
+            do_backup
+            read -p "$PROMPT_CONTINUE"
+            ;;
+        2)  # Yedek Geri Yükle
+            do_restore
+            read -p "$PROMPT_CONTINUE"
+            ;;
+        3)  # Yedekleri Listele
+            list_backups
+            ;;
+        4)  # Yedek Sil
+            delete_backup
+            read -p "$PROMPT_CONTINUE"
+            ;;
+        5)  # Container Değiştir
+            select_container
+            select_database  # Container değişiminden sonra doğrudan veritabanı seçimine git
+            ;;
+        6)  # Veritabanı Değiştir
+            select_database
+            ;;
+        7)  # Çıkış
+            echo "Program sonlandırılıyor..."
+            exit 0
+            ;;
+        *)
+            warning "$ERR_INVALID_CHOICE"
+            read -p "$PROMPT_CONTINUE"
+            ;;
+    esac
 done 
