@@ -95,14 +95,14 @@ chmod +x mongo_backup_manager.sh
 
 ## Dökümantasyon
 
-- [API Dokümantasyonu](docs/API.md)
-- [Kullanım Kılavuzu](docs/USAGE.md)
-- [Sorun Giderme](docs/TROUBLESHOOTING.md)
-- [Katkı Sağlama](docs/CONTRIBUTING.md)
+- [API Dokümantasyonu](docs/tr/API.md)
+- [Kullanım Kılavuzu](docs/tr/USAGE.md)
+- [Sorun Giderme](docs/tr/TROUBLESHOOTING.md)
+- [Katkı Sağlama](docs/tr/CONTRIBUTING.md)
 
 ## Katkı Sağlama
 
-Katkılarınızı bekliyoruz! Detaylar için [Katkı Sağlama Rehberi](docs/CONTRIBUTING.md)'ni inceleyebilirsiniz.
+Katkılarınızı bekliyoruz! Detaylar için [Katkı Sağlama Rehberi](docs/tr/CONTRIBUTING.md)'ni inceleyebilirsiniz.
 
 ## Lisans
 
