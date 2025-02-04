@@ -12,6 +12,7 @@ MENU_RESTORE="Yedek Geri Yükle"
 MENU_LIST="Yedekleri Listele"
 MENU_DELETE="Yedek Sil"
 MENU_CONTAINER_CHANGE="Container Değiştir"
+MENU_HISTORY="Son İşlemler"
 MENU_EXIT="Çıkış"
 
 # Bilgi mesajları
@@ -46,6 +47,7 @@ MSG_NO_BACKUPS="Henüz yedek bulunmuyor"
 MSG_ENTER_BACKUP_DESC="Bu yedek için bir açıklama girin"
 MSG_DEFAULT_DESC="Açıklama girilmedi"
 MSG_CONFIRM_DELETE="Onaylıyor musunuz?"
+MSG_NO_HISTORY="Henüz işlem geçmişi bulunmuyor"
 
 # Ek işlem mesajları
 MSG_COPYING_FILES="Yedek dosyaları container'a kopyalanıyor..."

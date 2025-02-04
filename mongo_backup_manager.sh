@@ -637,11 +637,27 @@ delete_backup() {
     read -p "$MSG_CONFIRM_DELETE (e/H): " confirm
     
     if [ "$confirm" = "e" ] || [ "$confirm" = "E" ]; then
+        local backup_size=$(get_dir_size "$backup_path")
         rm -rf "$backup_path"
         log "$MSG_BACKUP_DELETED: $backup_path"
+        log_history "$MSG_BACKUP_DELETED" "$DB_NAME - $backup_size"
     else
         warning "$MSG_DELETE_CANCELLED"
     fi
+}
+
+# Son işlemleri görüntüle
+show_history() {
+    echo
+    info "$INFO_BACKUP_HISTORY"
+    echo "----------------------------------------"
+    if [ -f "/tmp/mongo_backup_history.log" ]; then
+        cat "/tmp/mongo_backup_history.log"
+    else
+        warning "$MSG_NO_HISTORY"
+    fi
+    echo "----------------------------------------"
+    read -p "$PROMPT_CONTINUE"
 }
 
 # Ana menü
@@ -685,7 +701,8 @@ show_menu() {
     echo "4) $MENU_DELETE"
     echo "5) $MENU_CONTAINER_CHANGE"
     echo "6) $MENU_DATABASE_CHANGE"
-    echo "7) $MENU_EXIT"
+    echo "7) $MENU_HISTORY"
+    echo "8) $MENU_EXIT"
     echo "============================================"
 }
 
@@ -765,7 +782,7 @@ while true; do
         continue
     fi
     
-    printf "$PROMPT_CHOICE_RANGE" 1 7
+    printf "$PROMPT_CHOICE_RANGE" 1 8
     read choice
     case $choice in
         1)  # Yedek Al
@@ -790,7 +807,10 @@ while true; do
         6)  # Veritabanı Değiştir
             select_database
             ;;
-        7)  # Çıkış
+        7)  # Son İşlemler
+            show_history
+            ;;
+        8)  # Çıkış
             echo "Program sonlandırılıyor..."
             exit 0
             ;;

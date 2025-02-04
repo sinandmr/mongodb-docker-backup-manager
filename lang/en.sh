@@ -12,6 +12,7 @@ MENU_RESTORE="Restore Backup"
 MENU_LIST="List Backups"
 MENU_DELETE="Delete Backup"
 MENU_CONTAINER_CHANGE="Change Container"
+MENU_HISTORY="Recent Operations"
 MENU_EXIT="Exit"
 
 # Info messages
@@ -83,4 +84,8 @@ PROMPT_CHOICE_RANGE="Enter your choice (%d-%d): "
 PROMPT_CHOICE_SINGLE="Enter your choice (%d): "
 PROMPT_BACKUP_NUMBER="Enter the number of the backup to restore"
 PROMPT_DELETE_NUMBER="Enter the number of the backup to delete (0 to cancel)"
-PROMPT_BACKUP_DIR="Full path of backup directory" 
+PROMPT_BACKUP_DIR="Full path of backup directory"
+MSG_NO_HISTORY="No operation history available yet"
+
+# Additional operation messages
+MSG_NO_HISTORY="No operation history available yet" 
