@@ -6,8 +6,34 @@
 
 # Kullanım: ./mongo_backup_manager.sh
 
+if [ "$1" = "--run-tests" ]; then
+    if [ ! -f "tests/test_backup_manager.sh" ]; then
+        echo "Hata: Test dosyası bulunamadı!"
+        exit 1
+    fi
+    
+    echo "Test suite başlatılıyor..."
+    cd tests
+    ./test_backup_manager.sh
+    TEST_RESULT=$?
+    
+    if [ $TEST_RESULT -eq 0 ]; then
+        echo "✅ Tüm testler başarıyla tamamlandı."
+    else
+        echo "❌ Bazı testler başarısız oldu."
+    fi
+    
+    exit $TEST_RESULT
+fi
+
 # Dil seçimi için fonksiyon
 select_language() {
+    # Test modunda dil seçimini atla
+    if [ "$TEST_MODE" = true ]; then
+        LANG_FILE="lang/tr.sh"
+        return 0
+    fi
+    
     clear
     echo "============================================"
     echo "       Language Selection / Dil Seçimi      "
